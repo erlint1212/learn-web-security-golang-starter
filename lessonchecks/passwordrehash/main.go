@@ -14,6 +14,7 @@ import (
 
 	"github.com/bootdotdev/learn-web-security/internal/auth/passwords"
 	"github.com/bootdotdev/learn-web-security/internal/database"
+	"github.com/joho/godotenv"
 )
 
 const seededBackupCode = "a6f31c8d94e2b7504d8a1f3c6b9e2075"
@@ -28,6 +29,7 @@ type result struct {
 }
 
 func main() {
+	_ = godotenv.Load(".env")
 	ctx := context.Background()
 	databasePath := os.Getenv("DATABASE_URL")
 	if databasePath == "" {
@@ -99,6 +101,9 @@ func encodedStaleArgon2id() string {
 
 func postForm(path string, values url.Values) int {
 	origin := strings.TrimRight(os.Getenv("APP_ORIGIN"), "/")
+	if origin == "" {
+		origin = "http://localhost:3030"
+	}
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	request, err := http.NewRequest(http.MethodPost, origin+path, strings.NewReader(values.Encode()))
 	if err != nil {

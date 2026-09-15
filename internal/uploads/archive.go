@@ -10,8 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/bootdotdev/learn-web-security/internal/identifiers"
+	"uuid"
 )
 
 const (
@@ -64,11 +63,8 @@ func ExtractTaxDocumentArchive(encryptionKeyring Keyring, contents []byte, extra
 		uncompressedBytes += entry.UncompressedSize64
 	}
 
-	identifier, err := identifiers.NewUUID()
-	if err != nil {
-		return ExtractedTaxDocumentArchive{}, err
-	}
-	importDirectory := filepath.Join(extractionDirectory, identifier)
+	identifier := uuid.NewV4()
+	importDirectory := filepath.Join(extractionDirectory, identifier.String())
 	plannedEntries := make([]plannedArchiveEntry, 0, len(archiveReader.File))
 	for _, entry := range archiveReader.File {
 		entryDestination := filepath.Join(importDirectory, entry.Name)
@@ -163,7 +159,7 @@ func isIgnoredArchiveEntry(entryName string) bool {
 
 func DiscardExtractedTaxDocumentArchive(archive ExtractedTaxDocumentArchive) error {
 	relativePath, err := filepath.Rel(archive.extractionDirectory, archive.ImportDirectory)
-	if err != nil || relativePath == "" || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || strings.Contains(relativePath, string(filepath.Separator)) || filepath.IsAbs(relativePath) {
+	if err != nil || relativePath == "." || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || strings.Contains(relativePath, string(filepath.Separator)) || filepath.IsAbs(relativePath) {
 		return fmt.Errorf("refuse to remove path outside the import directory: %s", archive.ImportDirectory)
 	}
 	if err := os.RemoveAll(archive.ImportDirectory); err != nil {

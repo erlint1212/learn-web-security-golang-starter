@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/bootdotdev/learn-web-security/internal/database"
+	"github.com/joho/godotenv"
 )
 
 var csrfPattern = regexp.MustCompile(`name="csrfToken"\s+type="hidden"\s+value="([^"]+)"`)
@@ -37,6 +38,7 @@ type result struct {
 }
 
 func main() {
+	_ = godotenv.Load(".env")
 	ctx := context.Background()
 	databasePath := os.Getenv("DATABASE_URL")
 	if databasePath == "" {
@@ -48,7 +50,7 @@ func main() {
 		return
 	}
 	defer databaseConnection.Close()
-	pawPalAPIKey := environmentValue("PAWPAL_API_KEY")
+	pawPalAPIKey := os.Getenv("PAWPAL_API_KEY")
 	client, err := authenticatedClient(ctx)
 	if err != nil || pawPalAPIKey == "" {
 		writeResult(result{})
@@ -229,27 +231,12 @@ func submitForm(ctx context.Context, client *http.Client, requestPath string, va
 	return client.Do(request)
 }
 
-func environmentValue(name string) string {
-	if value := os.Getenv(name); value != "" {
-		return value
-	}
-	file, err := os.Open(".env")
-	if err != nil {
-		return ""
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		key, value, found := strings.Cut(scanner.Text(), "=")
-		if found && strings.TrimSpace(key) == name {
-			return strings.Trim(strings.TrimSpace(value), `"'`)
-		}
-	}
-	return ""
-}
-
 func origin() string {
-	return strings.TrimRight(environmentValue("APP_ORIGIN"), "/")
+	applicationOrigin := strings.TrimRight(os.Getenv("APP_ORIGIN"), "/")
+	if applicationOrigin == "" {
+		return "http://localhost:3030"
+	}
+	return applicationOrigin
 }
 
 func writeResult(output result) {

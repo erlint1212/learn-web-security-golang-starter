@@ -10,10 +10,10 @@ import (
 	"math"
 	"strconv"
 	"time"
+	"uuid"
 
 	"github.com/bootdotdev/learn-web-security/internal/accounts"
 	"github.com/bootdotdev/learn-web-security/internal/database/dbgen"
-	"github.com/bootdotdev/learn-web-security/internal/identifiers"
 	"github.com/go-webauthn/webauthn/protocol"
 	webauthn "github.com/go-webauthn/webauthn/webauthn"
 )
@@ -25,7 +25,7 @@ type Credential struct {
 }
 
 type Challenge struct {
-	ID          string
+	ID          uuid.UUID
 	UserID      *int64
 	SessionData webauthn.SessionData
 }
@@ -104,16 +104,13 @@ func (store *Store) CreateChallenge(ctx context.Context, userID *int64, sessionD
 	if err := store.queries.DeleteExpiredPasskeyChallenges(ctx, formatTimestamp(now)); err != nil {
 		return Challenge{}, fmt.Errorf("delete expired passkey challenges: %w", err)
 	}
-	identifier, err := identifiers.NewUUID()
-	if err != nil {
-		return Challenge{}, err
-	}
+	identifier := uuid.NewV4()
 	serializedSession, err := json.Marshal(sessionData)
 	if err != nil {
 		return Challenge{}, fmt.Errorf("serialize passkey session data: %w", err)
 	}
 	if err := store.queries.CreatePasskeyChallenge(ctx, dbgen.CreatePasskeyChallengeParams{
-		ID: identifier, Challenge: sessionData.Challenge, UserID: userID, SessionData: string(serializedSession),
+		ID: identifier.String(), Challenge: sessionData.Challenge, UserID: userID, SessionData: string(serializedSession),
 		ExpiresAt: formatTimestamp(sessionData.Expires), CreatedAt: formatTimestamp(now),
 	}); err != nil {
 		return Challenge{}, fmt.Errorf("create passkey challenge: %w", err)
@@ -121,8 +118,8 @@ func (store *Store) CreateChallenge(ctx context.Context, userID *int64, sessionD
 	return Challenge{ID: identifier, UserID: userID, SessionData: sessionData}, nil
 }
 
-func (store *Store) ConsumeChallenge(ctx context.Context, identifier string) (Challenge, bool, error) {
-	row, err := store.queries.ConsumePasskeyChallenge(ctx, identifier)
+func (store *Store) ConsumeChallenge(ctx context.Context, identifier uuid.UUID) (Challenge, bool, error) {
+	row, err := store.queries.ConsumePasskeyChallenge(ctx, identifier.String())
 	if errors.Is(err, sql.ErrNoRows) {
 		return Challenge{}, false, nil
 	}
@@ -137,7 +134,7 @@ func (store *Store) ConsumeChallenge(ctx context.Context, identifier string) (Ch
 	if err := json.Unmarshal([]byte(row.SessionData), &sessionData); err != nil {
 		return Challenge{}, false, fmt.Errorf("decode passkey session data: %w", err)
 	}
-	return Challenge{ID: row.ID, UserID: row.UserID, SessionData: sessionData}, true, nil
+	return Challenge{ID: identifier, UserID: row.UserID, SessionData: sessionData}, true, nil
 }
 
 func (store *Store) StoreCredential(ctx context.Context, userID int64, credential webauthn.Credential) error {

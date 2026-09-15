@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/bootdotdev/learn-web-security/internal/database"
+	"github.com/joho/godotenv"
 )
 
 type result struct {
@@ -38,6 +39,7 @@ type storedDocument struct {
 }
 
 func main() {
+	_ = godotenv.Load(".env")
 	ctx := context.Background()
 	databasePath := os.Getenv("DATABASE_URL")
 	if databasePath == "" {
@@ -252,7 +254,11 @@ func request(ctx context.Context, client *http.Client, path string) (*http.Respo
 }
 
 func origin() string {
-	return strings.TrimRight(os.Getenv("APP_ORIGIN"), "/")
+	applicationOrigin := strings.TrimRight(os.Getenv("APP_ORIGIN"), "/")
+	if applicationOrigin == "" {
+		return "http://localhost:3030"
+	}
+	return applicationOrigin
 }
 
 func writeResult(output result) {

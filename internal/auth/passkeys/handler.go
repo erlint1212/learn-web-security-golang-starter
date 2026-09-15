@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+	"uuid"
 
 	"github.com/bootdotdev/learn-web-security/internal/accounts"
 	"github.com/bootdotdev/learn-web-security/internal/auth/mfa"
@@ -97,7 +98,7 @@ func (handler *Handler) BeginLogin(responseWriter http.ResponseWriter, request *
 		handler.internalError(responseWriter, request, err)
 		return
 	}
-	httpx.RespondWithJSON(responseWriter, http.StatusOK, map[string]any{"challengeId": challenge.ID, "publicKey": options.Response})
+	httpx.RespondWithJSON(responseWriter, http.StatusOK, map[string]any{"challengeId": challenge.ID.String(), "publicKey": options.Response})
 }
 
 func (handler *Handler) CompleteLogin(responseWriter http.ResponseWriter, request *http.Request) {
@@ -253,7 +254,7 @@ func (handler *Handler) BeginRegistration(responseWriter http.ResponseWriter, re
 		handler.internalError(responseWriter, request, err)
 		return
 	}
-	httpx.RespondWithJSON(responseWriter, http.StatusOK, map[string]any{"challengeId": challenge.ID, "publicKey": options.Response})
+	httpx.RespondWithJSON(responseWriter, http.StatusOK, map[string]any{"challengeId": challenge.ID.String(), "publicKey": options.Response})
 }
 
 func (handler *Handler) CompleteRegistration(responseWriter http.ResponseWriter, request *http.Request) {
@@ -334,19 +335,23 @@ func (handler *Handler) DeleteCredential(responseWriter http.ResponseWriter, req
 	http.Redirect(responseWriter, request, "/account/passkey", http.StatusFound)
 }
 
-func (handler *Handler) passkeyResponse(responseWriter http.ResponseWriter, request *http.Request, hasReturnTo bool) (string, string, map[string]json.RawMessage, error) {
+func (handler *Handler) passkeyResponse(responseWriter http.ResponseWriter, request *http.Request, hasReturnTo bool) (uuid.UUID, string, map[string]json.RawMessage, error) {
 	request.Body = http.MaxBytesReader(responseWriter, request.Body, handler.maximumRequestBytes)
 	body, err := io.ReadAll(request.Body)
 	if err != nil {
-		return "", "/", nil, fmt.Errorf("read passkey response: %w", err)
+		return uuid.Nil(), "/", nil, fmt.Errorf("read passkey response: %w", err)
 	}
 	var responseFields map[string]json.RawMessage
 	if err := json.Unmarshal(body, &responseFields); err != nil || responseFields == nil {
-		return "", "/", nil, errors.New("passkey response must be a JSON object")
+		return uuid.Nil(), "/", nil, errors.New("passkey response must be a JSON object")
 	}
-	challengeID, err := stringField(responseFields, "challengeId")
-	if err != nil || challengeID == "" {
-		return "", "/", nil, errors.New("passkey challenge ID is required")
+	challengeIDValue, err := stringField(responseFields, "challengeId")
+	if err != nil || challengeIDValue == "" {
+		return uuid.Nil(), "/", nil, errors.New("passkey challenge ID is required")
+	}
+	challengeID, err := uuid.Parse(challengeIDValue)
+	if err != nil {
+		return uuid.Nil(), "/", nil, errors.New("passkey challenge ID must be a UUID")
 	}
 	delete(responseFields, "challengeId")
 	returnTo := "/"
@@ -354,7 +359,7 @@ func (handler *Handler) passkeyResponse(responseWriter http.ResponseWriter, requ
 		if _, found := responseFields["returnTo"]; found {
 			returnToValue, err := stringField(responseFields, "returnTo")
 			if err != nil {
-				return "", "/", nil, err
+				return uuid.Nil(), "/", nil, err
 			}
 			returnTo = unsafeReturnTo(returnToValue)
 		}
@@ -362,7 +367,7 @@ func (handler *Handler) passkeyResponse(responseWriter http.ResponseWriter, requ
 	}
 	encodedResponse, err := json.Marshal(responseFields)
 	if err != nil {
-		return "", "/", nil, fmt.Errorf("encode passkey response: %w", err)
+		return uuid.Nil(), "/", nil, fmt.Errorf("encode passkey response: %w", err)
 	}
 	request.Body = io.NopCloser(bytes.NewReader(encodedResponse))
 	request.ContentLength = int64(len(encodedResponse))
