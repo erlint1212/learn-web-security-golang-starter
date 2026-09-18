@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"unicode/utf8"
@@ -237,6 +238,18 @@ func (handler *authHandler) Logout(responseWriter http.ResponseWriter, request *
 	if err := handler.mfa.DeleteChallenge(request.Context(), challengeToken); err != nil {
 		handler.internalError(responseWriter, request, err)
 		return
+	}
+	current, found, err := sessions.Current(request, handler.accounts)
+	if err != nil {
+		handler.internalError(responseWriter, request, err)
+		return
+	}
+	if found {
+		err = handler.accounts.RevokeSession(request.Context(), current.Session.Token)
+		if err != nil {
+			handler.internalError(responseWriter, request, fmt.Errorf("failed to revoke session: %v", err))
+			return
+		}
 	}
 	sessions.ClearCookie(responseWriter)
 	if challengeToken != "" {
