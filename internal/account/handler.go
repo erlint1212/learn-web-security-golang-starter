@@ -10,6 +10,7 @@ import (
 
 	"github.com/bootdotdev/learn-web-security/internal/accounts"
 	"github.com/bootdotdev/learn-web-security/internal/auth/mfa"
+	"github.com/bootdotdev/learn-web-security/internal/auth/passwords"
 	"github.com/bootdotdev/learn-web-security/internal/auth/sessions"
 	"github.com/bootdotdev/learn-web-security/internal/httpx"
 	"github.com/bootdotdev/learn-web-security/internal/logging"
@@ -77,6 +78,11 @@ func (handler *Handler) UpdateEmail(responseWriter http.ResponseWriter, request 
 		handler.errorPage(responseWriter, http.StatusBadRequest, "Invalid Request", "The submitted form is invalid.")
 		return
 	}
+	psw, pswErr := httpx.FormValue(request, "currentPassword")
+	if pswErr != nil {
+		handler.errorPage(responseWriter, http.StatusBadRequest, "Invalid Request", "The submitted form is invalid.")
+		return
+	}
 	email = accounts.NormalizeEmail(email)
 	if email == "" {
 		if err := handler.renderPage(responseWriter, http.StatusBadRequest, current, "Email is required."); err != nil {
@@ -87,6 +93,16 @@ func (handler *Handler) UpdateEmail(responseWriter http.ResponseWriter, request 
 	existingUser, found, err := handler.accountStore.FindUserByEmail(request.Context(), email)
 	if err != nil {
 		handler.internalError(responseWriter, request, err)
+		return
+	}
+	if psw == "" {
+		handler.errorPage(responseWriter, http.StatusForbidden, "Wrong Password", "The submitted password is incorrect, please re-enter the password.")
+		return
+	}
+	session, _ := handler.requireAuth(responseWriter, request)
+	pswValid := passwords.Verify(psw, session.User.PasswordHash)
+	if !pswValid {
+		handler.errorPage(responseWriter, http.StatusForbidden, "Wrong Password", "The submitted password is incorrect, please re-enter the password.")
 		return
 	}
 	if found && existingUser.ID != current.User.ID {
