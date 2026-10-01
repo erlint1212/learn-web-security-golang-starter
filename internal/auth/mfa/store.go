@@ -303,7 +303,19 @@ func (store *Store) ConsumeBackupCode(ctx context.Context, userID int64, code st
 	if err := store.database.QueryRowContext(ctx, "SELECT COUNT(*) FROM totp_backup_codes WHERE user_id = ? AND code_hash = ?", userID, hashToken(code)).Scan(&count); err != nil {
 		return false, fmt.Errorf("find TOTP backup code: %w", err)
 	}
-	return count == 1, nil
+	arg := dbgen.ConsumeTOTPBackupCodeParams{UserID: userID, CodeHash: hashToken(code)}
+	consumeResult, err := store.queries.ConsumeTOTPBackupCode(ctx, arg)
+	if err != nil {
+		return false, fmt.Errorf("consume TOTP backup code: %w", err)
+	}
+	rowsAffected, err := consumeResult.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("consume TOTP backup code failed to read rows affected: %w", err)
+	}
+	if rowsAffected > 0 {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (store *Store) CountRecentRecoveryFailures(ctx context.Context, email string) (int64, error) {
